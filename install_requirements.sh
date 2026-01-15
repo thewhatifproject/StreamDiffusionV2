@@ -36,6 +36,12 @@ else
     source "$(conda info --base)/etc/profile.d/conda.sh"
 fi
 
+# Accept Anaconda channel TOS for non-interactive installs (new conda)
+if conda tos --help >/dev/null 2>&1; then
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main || true
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r || true
+fi
+
 if ! conda env list | awk '{print $1}' | grep -qx "$ENV_NAME"; then
     conda create -y -n "$ENV_NAME" python=3.11
 fi
