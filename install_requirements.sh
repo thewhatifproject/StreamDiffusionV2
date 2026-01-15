@@ -9,6 +9,39 @@ echo "========================================="
 echo "Installing StreamDiffusionV2 dependencies"
 echo "========================================="
 
+# Step 0: Install Miniconda and create a dedicated env
+echo ""
+echo "Step 0: Installing Miniconda and creating env..."
+
+ENV_NAME="streamdiffusionv2"
+MINICONDA_DIR="$HOME/miniconda3"
+
+if ! command -v conda >/dev/null 2>&1; then
+    if [ ! -d "$MINICONDA_DIR" ]; then
+        MINICONDA_INSTALLER="/tmp/Miniconda3-latest-Linux-x86_64.sh"
+        if [ "$(uname)" = "Darwin" ]; then
+            MINICONDA_INSTALLER="/tmp/Miniconda3-latest-MacOSX-x86_64.sh"
+        fi
+
+        echo "Downloading Miniconda installer..."
+        curl -fsSL "https://repo.anaconda.com/miniconda/$(basename "$MINICONDA_INSTALLER")" -o "$MINICONDA_INSTALLER"
+        echo "Installing Miniconda to $MINICONDA_DIR..."
+        bash "$MINICONDA_INSTALLER" -b -p "$MINICONDA_DIR"
+    fi
+
+    # shellcheck disable=SC1091
+    source "$MINICONDA_DIR/etc/profile.d/conda.sh"
+else
+    # shellcheck disable=SC1091
+    source "$(conda info --base)/etc/profile.d/conda.sh"
+fi
+
+if ! conda env list | awk '{print $1}' | grep -qx "$ENV_NAME"; then
+    conda create -y -n "$ENV_NAME" python=3.11
+fi
+
+conda activate "$ENV_NAME"
+
 # Step 1: Install PyTorch and related packages first (if not already installed)
 echo ""
 echo "Step 1: Ensuring PyTorch is installed..."
