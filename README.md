@@ -43,7 +43,7 @@ pip install psutil
 pip install --no-build-isolation --no-deps flash_attn==2.7.4.post1
 # Remove nvidia-pyindex from requirements.txt if present
 pip install -r requirements.txt --no-deps
-python setup.py develop
+pip install -e . --no-deps
 ```
 
 ## Download Checkpoints
