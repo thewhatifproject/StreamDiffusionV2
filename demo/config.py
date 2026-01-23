@@ -66,7 +66,7 @@ parser.add_argument("--checkpoint_folder", type=str, default="../ckpts/wan_causa
 parser.add_argument("--step", type=int, default=2)
 parser.add_argument("--noise_scale", type=float, default=0.8)
 parser.add_argument("--debug", type=bool, default=True)
-parser.add_argument("--num_gpus", type=int, default=2)
+parser.add_argument("--num_gpus", type=int, default=1)
 parser.add_argument("--gpu_ids", type=str, default="0,1") # id separated by comma, size should match num_gpus
 
 # These are only used when num_gpus > 1
