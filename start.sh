@@ -19,102 +19,162 @@ REPO_DIR="$HOME/StreamDiffusionV2"
 # ============================================================
 # 1. DOWNLOAD MINICONDA
 # ============================================================
-echo "[1/12] Download Miniconda..."
+echo "[1/17] Download Miniconda..."
 cd /tmp
 wget -q "${INSTALLER_URL}" -O "${INSTALLER}"
 
 # ============================================================
-# 2. INSTALLAZIONE MINICONDA (BATCH)
+# 2. INSTALLAZIONE MINICONDA
 # ============================================================
-echo "[2/12] Installazione Miniconda..."
+echo "[2/17] Installazione Miniconda..."
 if [ ! -d "${MINICONDA_DIR}" ]; then
   bash "${INSTALLER}" -b -p "${MINICONDA_DIR}"
-else
-  echo "Miniconda già presente in ${MINICONDA_DIR}"
 fi
 
 # ============================================================
-# 3. CARICAMENTO CONDA NELLA SESSIONE CORRENTE
+# 3. CARICAMENTO CONDA (SESSIONE CORRENTE)
 # ============================================================
-echo "[3/12] Caricamento Conda..."
+echo "[3/17] Caricamento Conda..."
 source "${MINICONDA_DIR}/etc/profile.d/conda.sh"
 "${MINICONDA_DIR}/bin/conda" config --set auto_activate_base false >/dev/null 2>&1 || true
 
 # ============================================================
-# 4. ACCETTAZIONE TERMS OF SERVICE
+# 4. AUTO-ACTIVATE SEMPRE sdiff2 (SSH SAFE)
 # ============================================================
-echo "[4/12] Accettazione Terms of Service Anaconda..."
+echo "[4/17] Configurazione auto-activate shell..."
+
+# login shell → carica bashrc
+if ! grep -q 'source ~/.bashrc' "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<'EOF'
+
+if [ -f ~/.bashrc ]; then
+  . ~/.bashrc
+fi
+EOF
+fi
+
+# conda + activate
+if ! grep -q 'conda activate sdiff2' "$HOME/.bashrc" 2>/dev/null; then
+  cat >> "$HOME/.bashrc" <<EOF
+
+# --- Conda ---
+if [ -f "$MINICONDA_DIR/etc/profile.d/conda.sh" ]; then
+  . "$MINICONDA_DIR/etc/profile.d/conda.sh"
+fi
+conda activate sdiff2
+EOF
+fi
+
+# ============================================================
+# 5. ACCETTAZIONE TERMS OF SERVICE
+# ============================================================
+echo "[5/17] Accettazione ToS Anaconda..."
 "${MINICONDA_DIR}/bin/conda" tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
 "${MINICONDA_DIR}/bin/conda" tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
 
 # ============================================================
-# 5. CREAZIONE ENV (IDEMPOTENTE)
+# 6. CREAZIONE ENV
 # ============================================================
-echo "[5/12] Creazione environment '${ENV_NAME}'..."
-if "${MINICONDA_DIR}/bin/conda" env list | awk '{print $1}' | grep -qx "${ENV_NAME}"; then
-  echo "Environment '${ENV_NAME}' già esistente"
-else
-  "${MINICONDA_DIR}/bin/conda" create -n "${ENV_NAME}" "python=${PYTHON_VERSION}" -y
+echo "[6/17] Creazione environment '${ENV_NAME}'..."
+if ! "${MINICONDA_DIR}/bin/conda" env list | awk '{print $1}' | grep -qx "${ENV_NAME}"; then
+  "${MINICONDA_DIR}/bin/conda" create -n "${ENV_NAME}" python="${PYTHON_VERSION}" -y
 fi
-
-# ============================================================
-# 6. ATTIVAZIONE ENV
-# ============================================================
-echo "[6/12] Attivazione environment '${ENV_NAME}'..."
 conda activate "${ENV_NAME}"
 
 # ============================================================
-# 8. UPGRADE TOOLING PYTHON
+# 7. NODE.JS 18 via NVM
 # ============================================================
-echo "[8/12] Upgrade pip / setuptools / wheel..."
+echo "[7/17] Installazione Node.js 18 (nvm)..."
+
+export NVM_DIR="$HOME/.nvm"
+
+if [ ! -d "$NVM_DIR" ]; then
+  curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+fi
+
+# carica nvm nella sessione corrente
+# shellcheck disable=SC1090
+source "$NVM_DIR/nvm.sh"
+
+# install / usa / default
+nvm install 18
+nvm use 18
+nvm alias default 18
+
+# garantisce nvm a ogni SSH
+if ! grep -q 'NVM_DIR' "$HOME/.bashrc"; then
+  cat >> "$HOME/.bashrc" <<'EOF'
+
+# --- NVM ---
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+EOF
+fi
+
+node -v
+npm -v
+
+# ============================================================
+# 8. TOOLING PYTHON
+# ============================================================
+echo "[8/17] Upgrade pip / setuptools / wheel..."
 python -m pip install -U pip setuptools wheel
 
 # ============================================================
-# 9. INSTALL PYTORCH CUDA 12.4
+# 9. PYTORCH CUDA 12.4
 # ============================================================
-echo "[9/12] Install PyTorch (cu124)..."
+echo "[9/17] Install PyTorch..."
 pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 \
   --index-url https://download.pytorch.org/whl/cu124
 
 # ============================================================
-# 10. INSTALL FLASH-ATTN
+# 10. PSUTIL + FLASH-ATTN
 # ============================================================
-echo "[10/12] Install flash_attn..."
+echo "[10/17] Install psutil + flash_attn..."
+pip install psutil
 pip install --no-build-isolation --no-deps flash_attn==2.7.4.post1
 
 # ============================================================
-# 11. CLONE STREAMDIFFUSIONV2 (DEV) + REQUIREMENTS
+# 11. CLONE STREAMDIFFUSIONV2
 # ============================================================
-echo "[11/12] Clone StreamDiffusionV2 (branch dev)..."
+echo "[11/17] Clone StreamDiffusionV2..."
 if [ ! -d "${REPO_DIR}" ]; then
   git clone --branch "${REPO_BRANCH}" "${REPO_URL}" "${REPO_DIR}"
-else
-  echo "Repository già presente, aggiorno..."
-  cd "${REPO_DIR}"
-  git fetch origin
-  git checkout "${REPO_BRANCH}"
-  git pull origin "${REPO_BRANCH}"
 fi
-
 cd "${REPO_DIR}"
 
 # ============================================================
-# 12. EDITABLE INSTALL (al posto di setup.py develop)
+# 12. REQUIREMENTS
 # ============================================================
-echo "[12/12] pip install -e . (editable)..."
+if grep -qE '^\s*nvidia-pyindex\b' requirements.txt; then
+  sed -i '/^\s*nvidia-pyindex\b/d' requirements.txt
+fi
+pip install -r requirements.txt --no-deps
 pip install -e . --no-deps
 
 # ============================================================
-# VERIFICA FINALE
+# 13. DOWNLOAD MODELLI
+# ============================================================
+echo "[13/17] Download modelli..."
+pip install -U huggingface_hub
+
+huggingface-cli download --resume-download Wan-AI/Wan2.1-T2V-14B \
+  --local-dir wan_models/Wan2.1-T2V-14B
+
+huggingface-cli download --resume-download jerryfeng/StreamDiffusionV2 \
+  --local-dir ./ckpts \
+  --include "wan_causal_dmd_v2v_14b/*"
+
+# ============================================================
+# 14. VERIFICA FINALE
 # ============================================================
 echo "--------------------------------------------------"
-echo "Setup completato con successo"
-echo "Conda env attivo: ${CONDA_DEFAULT_ENV}"
-python --version
+echo "Setup completato"
+echo "Conda env: ${CONDA_DEFAULT_ENV}"
+node -v
 python - <<'EOF'
 import torch
 print("torch:", torch.__version__)
-print("cuda:", torch.version.cuda)
-print("cuda available:", torch.cuda.is_available())
+print("cuda:", torch.cuda.is_available())
 EOF
 echo "--------------------------------------------------"

@@ -8,4 +8,6 @@ else
     echo -e "\033[1;31m\nfrontend build failed\n\033[0m" >&2  exit 1
 fi
 cd ../
-python main.py --port 7860 --host 0.0.0.0 --num_gpus 2 --step 2 --gpu_ids 0,1 --model_type T2V-1.3B
+NUM_GPUS="${NUM_GPUS:-1}"
+GPU_IDS="${GPU_IDS:-0}"
+python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 2 --gpu_ids "${GPU_IDS}" --model_type T2V-1.3B
