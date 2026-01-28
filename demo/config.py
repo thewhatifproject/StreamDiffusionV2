@@ -14,6 +14,10 @@ class Args(NamedTuple):
     checkpoint_folder: str
     step: int
     noise_scale: float
+    noise_scale_min: float
+    noise_scale_max: float
+    motion_strength: float
+    noise_ema: float
     debug: bool
     num_gpus: int
     gpu_ids: str
@@ -69,6 +73,10 @@ parser.add_argument("--config_path", type=str, default=DEFAULT_CONFIG_PATH)
 parser.add_argument("--checkpoint_folder", type=str, default=DEFAULT_CHECKPOINT_FOLDER)
 parser.add_argument("--step", type=int, default=2)
 parser.add_argument("--noise_scale", type=float, default=0.9)
+parser.add_argument("--noise_scale_min", type=float, default=0.0)
+parser.add_argument("--noise_scale_max", type=float, default=1.0)
+parser.add_argument("--motion_strength", type=float, default=0.1)
+parser.add_argument("--noise_ema", type=float, default=0.9)
 parser.add_argument("--debug", type=bool, default=True)
 parser.add_argument("--num_gpus", type=int, default=2)
 parser.add_argument("--gpu_ids", type=str, default="0,1") # id separated by comma, size should match num_gpus

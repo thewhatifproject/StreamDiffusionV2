@@ -49,6 +49,54 @@ class Pipeline:
             field="textarea",
             id="prompt",
         )
+        noise_scale: float = Field(
+            0.9,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Prompt strength (noise scale)",
+            field="range",
+            id="noise_scale",
+        )
+        noise_scale_min: float = Field(
+            0.0,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Noise scale min",
+            field="range",
+            id="noise_scale_min",
+            hide=True,
+        )
+        noise_scale_max: float = Field(
+            1.0,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Noise scale max",
+            field="range",
+            id="noise_scale_max",
+            hide=True,
+        )
+        motion_strength: float = Field(
+            0.1,
+            min=0.0,
+            max=0.2,
+            step=0.01,
+            title="Motion penalty",
+            field="range",
+            id="motion_strength",
+        )
+        noise_ema: float = Field(
+            0.9,
+            min=0.0,
+            max=1.0,
+            step=0.05,
+            title="Noise smoothing (EMA)",
+            field="range",
+            id="noise_ema",
+            hide=True,
+        )
         width: int = Field(
             512, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
@@ -94,6 +142,11 @@ class Pipeline:
         self.restart_event = Event()
         self.prompt_dict = Manager().dict()
         self.prompt_dict["prompt"] = self.prompt
+        self.prompt_dict["noise_scale"] = float(self.args.noise_scale)
+        self.prompt_dict["noise_scale_min"] = float(getattr(self.args, "noise_scale_min", 0.0))
+        self.prompt_dict["noise_scale_max"] = float(getattr(self.args, "noise_scale_max", 1.0))
+        self.prompt_dict["motion_strength"] = float(getattr(self.args, "motion_strength", 0.1))
+        self.prompt_dict["noise_ema"] = float(getattr(self.args, "noise_ema", 0.9))
         self.process = Process(
             target=generate_process,
             args=(self.args, self.prompt_dict, self.prepare_event, self.restart_event, self.stop_event, self.input_queue, self.output_queue),
@@ -111,6 +164,16 @@ class Pipeline:
         if hasattr(params, "prompt") and params.prompt and self.prompt != params.prompt:
             self.prompt = params.prompt
             self.prompt_dict["prompt"] = self.prompt
+        if hasattr(params, "noise_scale") and params.noise_scale is not None:
+            self.prompt_dict["noise_scale"] = float(params.noise_scale)
+        if hasattr(params, "noise_scale_min") and params.noise_scale_min is not None:
+            self.prompt_dict["noise_scale_min"] = float(params.noise_scale_min)
+        if hasattr(params, "noise_scale_max") and params.noise_scale_max is not None:
+            self.prompt_dict["noise_scale_max"] = float(params.noise_scale_max)
+        if hasattr(params, "motion_strength") and params.motion_strength is not None:
+            self.prompt_dict["motion_strength"] = float(params.motion_strength)
+        if hasattr(params, "noise_ema") and params.noise_ema is not None:
+            self.prompt_dict["noise_ema"] = float(params.noise_ema)
 
         if hasattr(params, "restart") and params.restart:
             self.restart_event.set()
@@ -163,8 +226,9 @@ def generate_process(args, prompt_dict, prepare_event, restart_event, stop_event
                 restart_event.clear()
             images = read_images_from_queue(input_queue, first_batch_num_frames, device, stop_event, prefer_latest=True)
 
-            noise_scale = args.noise_scale
-            init_noise_scale = args.noise_scale
+            base_noise_scale = float(prompt_dict["noise_scale"])
+            noise_scale = base_noise_scale
+            init_noise_scale = base_noise_scale
 
             pipeline_manager.pipeline.vae.model.first_encode = True
             pipeline_manager.pipeline.vae.model.first_decode = True
@@ -208,12 +272,23 @@ def generate_process(args, prompt_dict, prepare_event, restart_event, stop_event
 
         images = read_images_from_queue(input_queue, chunk_size, device, stop_event)
 
+        base_noise_scale = float(prompt_dict["noise_scale"])
+        init_noise_scale = base_noise_scale
+        min_noise_scale = float(prompt_dict["noise_scale_min"])
+        max_noise_scale = float(prompt_dict["noise_scale_max"])
+        motion_strength = float(prompt_dict["motion_strength"])
+        noise_ema = float(prompt_dict["noise_ema"])
+
         noise_scale, current_step = compute_noise_scale_and_step(
             input_video_original=torch.cat([last_image, images], dim=2),
             end_idx=first_batch_num_frames,
             chunck_size=chunk_size,
             noise_scale=float(noise_scale),
             init_noise_scale=float(init_noise_scale),
+            motion_strength=motion_strength,
+            ema_weight=noise_ema,
+            min_noise_scale=min_noise_scale,
+            max_noise_scale=max_noise_scale,
         )
 
         latents = pipeline_manager.pipeline.vae.stream_encode(images, is_scale=False)

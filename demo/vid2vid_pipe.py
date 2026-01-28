@@ -39,6 +39,11 @@ class MultiGPUPipeline(Pipeline):
         self.restart_event = Event()
         self.prompt_dict = Manager().dict()
         self.prompt_dict["prompt"] = self.prompt
+        self.prompt_dict["noise_scale"] = float(self.args.noise_scale)
+        self.prompt_dict["noise_scale_min"] = float(getattr(self.args, "noise_scale_min", 0.0))
+        self.prompt_dict["noise_scale_max"] = float(getattr(self.args, "noise_scale_max", 1.0))
+        self.prompt_dict["motion_strength"] = float(getattr(self.args, "motion_strength", 0.1))
+        self.prompt_dict["noise_ema"] = float(getattr(self.args, "noise_ema", 0.9))
         self.p_input = Process(
                 target=input_process,
                 args=(0, self.total_block_num, self.args, self.prompt_dict, self.prepare_events[0], self.restart_event, self.stop_event, self.input_queue),
@@ -123,8 +128,9 @@ def input_process(rank, block_num, args, prompt_dict, prepare_event, restart_eve
             init_first_batch_for_input_process(args, device, pipeline_manager, images, prompt, block_num[rank])    
 
             chunk_idx = 0
-            noise_scale = args.noise_scale
-            init_noise_scale = args.noise_scale
+            base_noise_scale = float(prompt_dict["noise_scale"])
+            noise_scale = base_noise_scale
+            init_noise_scale = base_noise_scale
             current_start = pipeline_manager.pipeline.frame_seq_length * 2
             current_end = current_start + (chunk_size // 4) * pipeline_manager.pipeline.frame_seq_length
             last_image = images[:,:,[-1]]
@@ -143,12 +149,23 @@ def input_process(rank, block_num, args, prompt_dict, prepare_event, restart_eve
             torch.cuda.synchronize()
             start_vae = time.time()
 
+        base_noise_scale = float(prompt_dict["noise_scale"])
+        init_noise_scale = base_noise_scale
+        min_noise_scale = float(prompt_dict["noise_scale_min"])
+        max_noise_scale = float(prompt_dict["noise_scale_max"])
+        motion_strength = float(prompt_dict["motion_strength"])
+        noise_ema = float(prompt_dict["noise_ema"])
+
         noise_scale, current_step = compute_noise_scale_and_step(
             input_video_original=torch.cat([last_image, images], dim=2),
             end_idx=first_batch_num_frames,
             chunck_size=chunk_size,
             noise_scale=float(noise_scale),
             init_noise_scale=float(init_noise_scale),
+            motion_strength=motion_strength,
+            ema_weight=noise_ema,
+            min_noise_scale=min_noise_scale,
+            max_noise_scale=max_noise_scale,
         )
 
         latents = pipeline_manager.pipeline.vae.stream_encode(images, is_scale=False)  # [B, 4, T, H//16, W//16] or so

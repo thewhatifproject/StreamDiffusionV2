@@ -62,12 +62,31 @@ def load_mp4_as_tensor(
 
     return video  # [C, T, H, W]
 
-def compute_noise_scale_and_step(input_video_original: torch.Tensor, end_idx: int, chunck_size: int, noise_scale: float, init_noise_scale: float):
+def compute_noise_scale_and_step(
+    input_video_original: torch.Tensor,
+    end_idx: int,
+    chunck_size: int,
+    noise_scale: float,
+    init_noise_scale: float,
+    motion_strength: float = 0.1,
+    ema_weight: float = 0.9,
+    min_noise_scale: float = 0.0,
+    max_noise_scale: float = 1.0,
+    step_offset: int = -100,
+):
     """Compute adaptive noise scale and current step based on video content."""
-    l2_dist=(input_video_original[:,:,end_idx-chunck_size:end_idx]-input_video_original[:,:,end_idx-chunck_size-1:end_idx-1])**2
-    l2_dist = (torch.sqrt(l2_dist.mean(dim=(0,1,3,4))).max()/0.2).clamp(0,1)
-    new_noise_scale = (init_noise_scale-0.1*l2_dist.item())*0.9+noise_scale*0.1
-    current_step = int(1000*new_noise_scale)-100
+    l2_dist = (
+        input_video_original[:, :, end_idx - chunck_size:end_idx]
+        - input_video_original[:, :, end_idx - chunck_size - 1:end_idx - 1]
+    ) ** 2
+    l2_dist = (torch.sqrt(l2_dist.mean(dim=(0, 1, 3, 4))).max() / 0.2).clamp(0, 1)
+    target_noise_scale = init_noise_scale - motion_strength * l2_dist.item()
+    new_noise_scale = target_noise_scale * ema_weight + noise_scale * (1 - ema_weight)
+    if min_noise_scale is not None:
+        new_noise_scale = max(new_noise_scale, min_noise_scale)
+    if max_noise_scale is not None:
+        new_noise_scale = min(new_noise_scale, max_noise_scale)
+    current_step = int(1000 * new_noise_scale) + step_offset
     return new_noise_scale, current_step
 
 class SingleGPUInferencePipeline:
