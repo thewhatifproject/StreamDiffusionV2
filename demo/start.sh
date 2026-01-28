@@ -10,4 +10,6 @@ fi
 cd ../
 NUM_GPUS="${NUM_GPUS:-2}"
 GPU_IDS="${GPU_IDS:-0,1}"
-python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 2 --gpu_ids "${GPU_IDS}" --model_type T2V-14B
+MODEL_TYPE="${MODEL_TYPE:-T2V-14B}"
+CHECKPOINT_FOLDER="${CHECKPOINT_FOLDER:-../ckpts/wan_causal_dmd_v2v_14b}"
+python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 2 --gpu_ids "${GPU_IDS}" --model_type "${MODEL_TYPE}" --checkpoint_folder "${CHECKPOINT_FOLDER}"

@@ -61,8 +61,12 @@ parser.add_argument(
 parser.add_argument("--timeout", type=float, default=TIMEOUT, help="Timeout")
 
 # This is the default config for the pipeline, it can be overridden by the command line arguments
-parser.add_argument("--config_path", type=str, default="../configs/wan_causal_dmd_v2v.yaml")
-parser.add_argument("--checkpoint_folder", type=str, default="../ckpts/wan_causal_dmd_v2v")
+DEFAULT_CONFIG_PATH = "../configs/wan_causal_dmd_v2v.yaml"
+DEFAULT_CHECKPOINT_FOLDER = "../ckpts/wan_causal_dmd_v2v"
+DEFAULT_CHECKPOINT_FOLDER_14B = "../ckpts/wan_causal_dmd_v2v_14b"
+
+parser.add_argument("--config_path", type=str, default=DEFAULT_CONFIG_PATH)
+parser.add_argument("--checkpoint_folder", type=str, default=DEFAULT_CHECKPOINT_FOLDER)
 parser.add_argument("--step", type=int, default=2)
 parser.add_argument("--noise_scale", type=float, default=0.8)
 parser.add_argument("--debug", type=bool, default=True)
@@ -74,4 +78,8 @@ parser.add_argument("--max_outstanding", type=int, default=2, help="max number o
 parser.add_argument("--schedule_block", action="store_true", default=False)
 parser.add_argument("--model_type", type=str, default="T2V-1.3B", help="Model type (e.g., T2V-1.3B)")
 
-config = Args(**vars(parser.parse_args()))
+parsed_args = vars(parser.parse_args())
+if parsed_args["model_type"] == "T2V-14B" and parsed_args["checkpoint_folder"] == DEFAULT_CHECKPOINT_FOLDER:
+    parsed_args["checkpoint_folder"] = DEFAULT_CHECKPOINT_FOLDER_14B
+
+config = Args(**parsed_args)
