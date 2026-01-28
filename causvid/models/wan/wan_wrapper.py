@@ -36,7 +36,10 @@ class WanTextEncoder(TextEncoderInterface):
         )
 
         self.tokenizer = HuggingfaceTokenizer(
-            name=os.path.join(repo_root, "wan_models/Wan2.1-T2V-1.3B/google/umt5-xxl/"), seq_len=512, clean='whitespace')
+            name=os.path.join(repo_root, f"wan_models/Wan2.1-{model_type}/google/umt5-xxl/"),
+            seq_len=512,
+            clean='whitespace'
+        )
 
     @property
     def device(self):
@@ -134,11 +137,14 @@ class WanVAEWrapper(VAEInterface):
 
 
 class WanDiffusionWrapper(DiffusionModelInterface):
-    def __init__(self, model_type="T2V-1.3B"):
+    def __init__(self, model_type="T2V-1.3B", load_model: bool = True):
         super().__init__()
 
-        self.model = WanModel.from_pretrained(os.path.join(repo_root, f"wan_models/Wan2.1-{model_type}/"))
-        self.model.eval()
+        if load_model:
+            self.model = WanModel.from_pretrained(
+                os.path.join(repo_root, f"wan_models/Wan2.1-{model_type}/")
+            )
+            self.model.eval()
 
         self.uniform_timestep = True
 
@@ -324,7 +330,7 @@ class WanDiffusionWrapper(DiffusionModelInterface):
 
 class CausalWanDiffusionWrapper(WanDiffusionWrapper):
     def __init__(self, model_type="T2V-1.3B"):
-        super().__init__()
+        super().__init__(model_type=model_type, load_model=False)
 
         self.model = CausalWanModel.from_pretrained(
             os.path.join(repo_root, f"wan_models/Wan2.1-{model_type}/"))
