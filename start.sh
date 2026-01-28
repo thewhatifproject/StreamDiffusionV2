@@ -191,7 +191,6 @@ pip install -e . --no-deps
 # 14. DOWNLOAD MODELLI
 # ============================================================
 echo "[14/15] Download modelli..."
-pip install -U huggingface_hub
 
 huggingface-cli download --resume-download Wan-AI/Wan2.1-T2V-1.3B --local-dir wan_models/Wan2.1-T2V-1.3B
 huggingface-cli download --resume-download jerryfeng/StreamDiffusionV2 --local-dir ./ckpts --include "wan_causal_dmd_v2v/*"
