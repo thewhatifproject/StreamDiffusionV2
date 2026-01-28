@@ -14,7 +14,7 @@ MODEL_TYPE="${MODEL_TYPE:-T2V-1.3B}" #T2V-14B
 CHECKPOINT_FOLDER="${CHECKPOINT_FOLDER:-../ckpts/wan_causal_dmd_v2v}" #../ckpts/wan_causal_dmd_v2v_14b
 
 # Abilita tunnel Cloudflare impostando ENABLE_TUNNEL=1
-ENABLE_TUNNEL="${ENABLE_TUNNEL:-1}"
+ENABLE_TUNNEL="${ENABLE_TUNNEL:-0}"
 TUNNEL_URL="${TUNNEL_URL:-http://localhost:7860}"
 
 if [ "${ENABLE_TUNNEL}" = "1" ]; then
