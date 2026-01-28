@@ -21,19 +21,16 @@ from streamv2v.inference import compute_noise_scale_and_step
 
 class MultiGPUPipeline(Pipeline):
     def prepare(self):
-        total_blocks = 30
-        if self.args.num_gpus == 2:
-            self.total_block_num = [[0, 15], [15, total_blocks]]
-        else:
-            base = total_blocks // self.args.num_gpus
-            rem = total_blocks % self.args.num_gpus
-            start = 0
-            self.total_block_num = []
-            for r in range(self.args.num_gpus):
-                size = base + (1 if r < rem else 0)
-                end = start + size if r < self.args.num_gpus - 1 else total_blocks
-                self.total_block_num.append([start, end])
-                start = end
+        total_blocks = get_total_blocks(self.args)
+        base = total_blocks // self.args.num_gpus
+        rem = total_blocks % self.args.num_gpus
+        start = 0
+        self.total_block_num = []
+        for r in range(self.args.num_gpus):
+            size = base + (1 if r < rem else 0)
+            end = start + size if r < self.args.num_gpus - 1 else total_blocks
+            self.total_block_num.append([start, end])
+            start = end
         
         self.input_queue = Queue()
         self.output_queue = Queue()
@@ -68,6 +65,11 @@ class MultiGPUPipeline(Pipeline):
         for event in self.prepare_events:
             event.wait()
 
+def get_total_blocks(args):
+    if getattr(args, "model_type", "T2V-1.3B") == "T2V-14B":
+        return 40
+    return 30
+
 
 def input_process(rank, block_num, args, prompt_dict, prepare_event, restart_event, stop_event, input_queue):
     torch.set_grad_enabled(False)
@@ -77,6 +79,7 @@ def input_process(rank, block_num, args, prompt_dict, prepare_event, restart_eve
     block_num = torch.tensor(block_num, dtype=torch.int64, device=device)
 
     pipeline_manager = prepare_pipeline(args, device, rank, args.num_gpus)
+    total_blocks = pipeline_manager.pipeline.num_transformer_blocks
     num_steps = len(pipeline_manager.pipeline.denoising_step_list)
     first_batch_num_frames = 5
     chunk_size = 4
@@ -223,7 +226,7 @@ def input_process(rank, block_num, args, prompt_dict, prepare_event, restart_eve
             outstanding.append(work_objects)
             # Handle block scheduling
             if args.schedule_block and pipeline_manager.processed >= pipeline_manager.schedule_step:
-                pipeline_manager._handle_block_scheduling(block_num, total_blocks=30)
+                pipeline_manager._handle_block_scheduling(block_num, total_blocks=total_blocks)
                 args.schedule_block = False
 
         if args.schedule_block:
@@ -245,6 +248,7 @@ def output_process(rank, block_num, args, prompt_dict, prepare_event, stop_event
     block_num = torch.tensor(block_num, dtype=torch.int64, device=device)
     
     pipeline_manager = prepare_pipeline(args, device, rank, args.num_gpus)
+    total_blocks = pipeline_manager.pipeline.num_transformer_blocks
     num_steps = len(pipeline_manager.pipeline.denoising_step_list)
     prompt = prompt_dict["prompt"]
     is_running = False
@@ -287,7 +291,7 @@ def output_process(rank, block_num, args, prompt_dict, prepare_event, stop_event
                 continue
             # Handle block scheduling
             if args.schedule_block and pipeline_manager.processed >= pipeline_manager.schedule_step - rank:
-                pipeline_manager._handle_block_scheduling(block_num, total_blocks=30)
+                pipeline_manager._handle_block_scheduling(block_num, total_blocks=total_blocks)
                 args.schedule_block = False
         torch.cuda.current_stream().wait_stream(pipeline_manager.com_stream)
         # pipeline_manager.logger.info(f"[Rank {rank}] Received chunk {latent_data.chunk_idx} from previous rank")
@@ -371,6 +375,7 @@ def middle_process(rank, block_num, args, prompt_dict, prepare_event, stop_event
     block_num = torch.tensor(block_num, dtype=torch.int64, device=device)
     
     pipeline_manager = prepare_pipeline(args, device, rank, args.num_gpus)
+    total_blocks = pipeline_manager.pipeline.num_transformer_blocks
     num_steps = len(pipeline_manager.pipeline.denoising_step_list)
     prompt = prompt_dict["prompt"]
     is_running = False
@@ -422,7 +427,7 @@ def middle_process(rank, block_num, args, prompt_dict, prepare_event, stop_event
                 continue
             # Handle block scheduling
             if args.schedule_block and pipeline_manager.processed >= pipeline_manager.schedule_step - rank:
-                pipeline_manager._handle_block_scheduling(block_num, total_blocks=30)
+                pipeline_manager._handle_block_scheduling(block_num, total_blocks=total_blocks)
                 args.schedule_block = False
         torch.cuda.current_stream().wait_stream(pipeline_manager.com_stream)
         # pipeline_manager.logger.info(f"[Rank {rank}] Received chunk {latent_data.chunk_idx} from previous rank")
