@@ -12,7 +12,6 @@ import time
 from types import SimpleNamespace
 import asyncio
 import os
-import time
 import mimetypes
 import threading
 import multiprocessing as mp
@@ -99,48 +98,21 @@ class App:
                     if data and data.get("status") == "resume":
                         await self.conn_manager.send_json(user_id, {"status": "send_frame"})
                         continue
-                    # Mark upload completion: after this, don't receive image bytes again
-                    if data and data.get("status") == "upload_done":
-                        self.conn_manager.set_video_upload_completed(user_id, True)
-                        print(f"[Main] Upload completed for user {user_id}")
-                        await self.conn_manager.send_json(user_id, {"status": "upload_done_ack"})
-                        continue
                     if not data or data.get("status") != "next_frame":
                         await asyncio.sleep(THROTTLE)
                         continue
 
                     params = await self.conn_manager.receive_json(user_id)
                     params = self.pipeline.InputParams(**params)
-                    info = self.pipeline.Info()
                     params = SimpleNamespace(**params.dict())
-                    
-                    # Check if upload mode is enabled
-                    is_upload_mode = params.__dict__.get('input_mode') == 'upload' or params.__dict__.get('upload_mode', False)
-                    self.conn_manager.set_upload_mode(user_id, is_upload_mode)
-                    if is_upload_mode:
-                        print(f"[Main] Upload mode detected for user {user_id}")
-                    
-                    if info.input_mode == "image":
-                        upload_completed = self.conn_manager.is_video_upload_completed(user_id)
-                        # Only receive image bytes if not in upload mode, or upload not completed yet
-                        if (not is_upload_mode) or (is_upload_mode and not upload_completed):
-                            image_data = await self.conn_manager.receive_bytes(user_id)
-                            if len(image_data) == 0:
-                                await self.conn_manager.send_json(
-                                    user_id, {"status": "send_frame"}
-                                )
-                                # await asyncio.sleep(sleep_time)
-                                continue
-                            # If upload mode and not completed, append frames to cache for later reuse
-                            if is_upload_mode and not upload_completed:
-                                await self.conn_manager.add_video_frame(user_id, image_data)
-                                print(f"[Main] Added frame to video queue for user {user_id}")
-                            # For camera mode, set current image directly
-                            if not is_upload_mode:
-                                params.image = bytes_to_pil(image_data)
-                        else:
-                            # Upload already completed: do not receive more bytes; image will be fed from cached frames
-                            pass
+
+                    image_data = await self.conn_manager.receive_bytes(user_id)
+                    if len(image_data) == 0:
+                        await self.conn_manager.send_json(
+                            user_id, {"status": "send_frame"}
+                        )
+                        continue
+                    params.image = bytes_to_pil(image_data)
                     await self.conn_manager.update_data(user_id, params)
                     await self.conn_manager.send_json(user_id, {"status": "wait"})
                     if last_frame_time is None:
@@ -163,45 +135,16 @@ class App:
             try:
                 async def push_frames_to_pipeline():
                     last_params = SimpleNamespace()
-                    sleep_time = 1 / 20  # Initial guess
                     while True:
-                        # Check if upload mode is enabled
-                        video_status = self.conn_manager.get_video_queue_status(user_id)
-                        is_upload_mode = video_status.get("is_upload_mode", False)
-                        
-                        if is_upload_mode:
-                            # Upload mode: get next frame from video queue
-                            video_frame = await self.conn_manager.get_next_video_frame(user_id)
-                            if video_frame:
-                                # Create params object with video frame
-                                params = SimpleNamespace()
-                                params.image = bytes_to_pil(video_frame)
-                                # Copy other parameters
-                                if vars(last_params):
-                                    for key, value in last_params.__dict__.items():
-                                        if key != 'image':
-                                            setattr(params, key, value)
-                                
-                                if params.__dict__ != last_params.__dict__:
-                                    last_params = params
-                                    self.pipeline.accept_new_params(params)
-                                    print(f"[Main] Upload mode: sent frame to pipeline for user {user_id}")
-                                # Yield control without delaying to maximize fluency
-                                # await asyncio.sleep(sleep_time)
-                            else:
-                                # No frame available, wait a bit
-                                await asyncio.sleep(sleep_time)
-                        else:
-                            # Camera mode: normal processing
-                            params = await self.conn_manager.get_latest_data(user_id)
-                            if vars(params) and params.__dict__ != last_params.__dict__:
-                                last_params = params
-                                self.pipeline.accept_new_params(params)
-                            await self.conn_manager.send_json(
-                                user_id, {"status": "send_frame"}
-                            )
-                            # Yield control without delaying
-                            # await asyncio.sleep(sleep_time)
+                        params = await self.conn_manager.get_latest_data(user_id)
+                        if vars(params) and params.__dict__ != last_params.__dict__:
+                            last_params = params
+                            self.pipeline.accept_new_params(params)
+                        await self.conn_manager.send_json(
+                            user_id, {"status": "send_frame"}
+                        )
+                        # Yield control without delaying
+                        # await asyncio.sleep(sleep_time)
 
                 async def generate():
                     MIN_FPS = 5

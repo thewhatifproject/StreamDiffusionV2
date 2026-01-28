@@ -30,7 +30,7 @@ page_content = """<h1 class="text-3xl font-bold">StreamDiffusionV2</h1>
     target="_blank"
     class="text-blue-500 underline hover:no-underline">StreamDiffusionV2
 </a>
-video-to-video pipeline with a MJPEG stream server.
+webcam live streaming with a MJPEG stream server.
 </p>
 """
 

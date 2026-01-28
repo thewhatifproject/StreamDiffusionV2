@@ -1,6 +1,6 @@
 # StreamDiffusionV2 Demo (Web UI)
 
-This demo provides a simple web interface for live video-to-video inference using the backend in this repository. It supports webcam or screen capture input in the browser.
+This demo provides a simple web interface for live webcam inference using the backend in this repository.
 
 ## Prerequisites
 - Python 3.10 (follow the root README for environment setup)

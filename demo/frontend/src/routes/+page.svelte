@@ -20,10 +20,6 @@
   let currentQueueSize: number = 0;
   let queueCheckerRunning: boolean = false;
   let warningMessage: string = '';
-  let inputMode: 'camera' | 'upload' = 'camera';
-  let uploadedFile: File | null = null;
-  let uploadedVideoUrl: string | null = null;
-  let fileInputEl: HTMLInputElement | null = null;
   onMount(() => {
     getSettings();
   });
@@ -55,14 +51,11 @@
 
   function getSreamdata() {
     if (isImageMode) {
-      // Add input mode information to parameters
       const pipelineValues = getPipelineValues();
-      const paramsWithMode = { ...pipelineValues, input_mode: inputMode, upload_mode: inputMode === 'upload' };
-      return [paramsWithMode, $onFrameChangeStore?.blob];
+      return [pipelineValues, $onFrameChangeStore?.blob];
     } else {
       const pipelineValues = $deboucedPipelineValues;
-      const paramsWithMode = { ...pipelineValues, input_mode: inputMode, upload_mode: inputMode === 'upload' };
-      return [paramsWithMode];
+      return [pipelineValues];
     }
   }
 
@@ -73,49 +66,10 @@
   let disabled = false;
   let isStreaming = false;
 
-  function handleVideoEnded() {
-    // Only stop for camera mode; keep streaming for upload mode
-    if (inputMode === 'camera') {
-      isStreaming = false;
-      lcmLiveActions.stop();
-    }
-  }
-
-  function handleInputModeChange(mode: 'camera' | 'upload') {
-    // Always stop LCM and media streams first
-    lcmLiveActions.stop();
-    mediaStreamActions.stop();
-    isStreaming = false;
-    disabled = false;
-
-    // Reset stores and file input
-    onFrameChangeStore.set({ blob: new Blob() });
-    streamId.set(null); // <-- force output reset
-    lcmLiveStatus.set(LCMLiveStatus.DISCONNECTED); // <-- force status reset
-    if (uploadedVideoUrl) {
-      URL.revokeObjectURL(uploadedVideoUrl);
-      uploadedVideoUrl = null;
-    }
-    uploadedFile = null;
-    if (fileInputEl) fileInputEl.value = '';
-
-    // Set new mode
-    inputMode = mode;
-  }
-
-  function handleFileChange(event: Event) {
-    const files = (event.target as HTMLInputElement).files;
-    if (files && files.length > 0) {
-      uploadedFile = files[0];
-      if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl);
-      uploadedVideoUrl = URL.createObjectURL(uploadedFile);
-    }
-  }
-
   async function toggleLcmLive() {
     try {
       if (!isLCMRunning) {
-        if (inputMode === 'camera') {
+        if (isImageMode) {
           await mediaStreamActions.enumerateDevices();
           await mediaStreamActions.start();
         }
@@ -125,7 +79,7 @@
         disabled = false;
         toggleQueueChecker(false);
       } else {
-        if (inputMode === 'camera') {
+        if (isImageMode) {
           mediaStreamActions.stop();
         }
         disabled = true;
@@ -138,7 +92,7 @@
       warningMessage = e instanceof Error ? e.message : '';
       disabled = false;
       isStreaming = false;
-      if (inputMode === 'camera') {
+      if (isImageMode) {
         mediaStreamActions.stop();
       }
       lcmLiveActions.stop();
@@ -172,23 +126,9 @@
         > and run it on your own GPU.
       </p>
     {/if}
-    <p class="text-sm mt-2 text-gray-600">You can use your camera or upload a video as input. The left panel will show input frames, and the right panel will show streaming output frames.</p>
+    <p class="text-sm mt-2 text-gray-600">Use your camera as input. The left panel shows input frames, the right panel shows streaming output frames.</p>
   </article>
   {#if pipelineParams}
-    <!-- Input mode controls: now above the grid, spanning the whole page -->
-    <div class="mb-4 flex flex-row items-center justify-center gap-4">
-      <label>
-        <input type="radio" name="inputMode" value="camera" bind:group={inputMode} on:change={() => handleInputModeChange('camera')} disabled={isStreaming} />
-        Camera
-      </label>
-      <label>
-        <input type="radio" name="inputMode" value="upload" bind:group={inputMode} on:change={() => handleInputModeChange('upload')} disabled={isStreaming} />
-        Upload Video
-      </label>
-      {#if inputMode === 'upload'}
-        <input type="file" accept="video/*" on:change={handleFileChange} disabled={isStreaming} class="ml-2" bind:this={fileInputEl} />
-      {/if}
-    </div>
     <article class="my-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
       {#if isImageMode}
         <div class="sm:col-start-1">
@@ -196,10 +136,6 @@
             width={Number(pipelineParams.width.default)}
             height={Number(pipelineParams.height.default)}
             isStreaming={isStreaming}
-            onVideoEnded={handleVideoEnded}
-            onInputModeChange={() => handleInputModeChange(inputMode)}
-            bind:inputModeProp={inputMode}
-            { ...(inputMode === 'upload' ? { uploadedVideoUrl } : {}) }
           />
         </div>
       {/if}
