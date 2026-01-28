@@ -24,7 +24,7 @@ if [ "${ENABLE_TUNNEL}" = "1" ]; then
         exit 0
     fi
 
-    python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 2 --gpu_ids "${GPU_IDS}" --model_type "${MODEL_TYPE}" --checkpoint_folder "${CHECKPOINT_FOLDER}" &
+    python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 3 --gpu_ids "${GPU_IDS}" --model_type "${MODEL_TYPE}" --checkpoint_folder "${CHECKPOINT_FOLDER}" &
     APP_PID=$!
 
     # aspetta che uvicorn apra la porta
@@ -58,5 +58,5 @@ if [ "${ENABLE_TUNNEL}" = "1" ]; then
     trap 'kill ${TUNNEL_PID} ${APP_PID} 2>/dev/null || true' EXIT
     wait "${APP_PID}"
 else
-    python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 2 --gpu_ids "${GPU_IDS}" --model_type "${MODEL_TYPE}" --checkpoint_folder "${CHECKPOINT_FOLDER}"
+    python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 3 --gpu_ids "${GPU_IDS}" --model_type "${MODEL_TYPE}" --checkpoint_folder "${CHECKPOINT_FOLDER}"
 fi
