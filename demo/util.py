@@ -63,7 +63,12 @@ def read_images_from_queue(queue, num_frames_needed, device, stop_event=None, pr
     else:
         images = select_images(images, num_frames_needed)
     images = torch.from_numpy(images).unsqueeze(0)
-    images = images.permute(0, 4, 1, 2, 3).to(dtype=torch.bfloat16).to(device=device)
+    images = images.permute(0, 4, 1, 2, 3).contiguous()
+    if device.type == "cuda":
+        images = images.pin_memory()
+        images = images.to(dtype=torch.bfloat16, device=device, non_blocking=True)
+    else:
+        images = images.to(dtype=torch.bfloat16, device=device)
     return images
 
 

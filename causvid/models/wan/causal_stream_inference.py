@@ -7,9 +7,19 @@ from typing import List
 import torch
 import torch.distributed as dist
 
+def _enable_performance_settings() -> None:
+    # Enable fast paths; safe defaults for inference performance.
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cuda.matmul.allow_tf32 = True
+    if hasattr(torch.backends.cudnn, "allow_tf32"):
+        torch.backends.cudnn.allow_tf32 = True
+    if hasattr(torch, "set_float32_matmul_precision"):
+        torch.set_float32_matmul_precision("high")
+
 class CausalStreamInferencePipeline(torch.nn.Module):
     def __init__(self, args, device):
         super().__init__()
+        _enable_performance_settings()
         model_type = args.model_type
         self.device = device
         # Step 1: Initialize all models

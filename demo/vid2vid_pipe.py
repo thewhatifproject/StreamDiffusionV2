@@ -70,6 +70,11 @@ class MultiGPUPipeline(Pipeline):
         for event in self.prepare_events:
             event.wait()
 
+
+def _sync_if_needed(args):
+    if getattr(args, "debug", False) or getattr(args, "schedule_block", False):
+        torch.cuda.synchronize()
+
 def get_total_blocks(args):
     if getattr(args, "model_type", "T2V-1.3B") == "T2V-14B":
         return 40
@@ -90,6 +95,7 @@ def input_process(rank, block_num, args, prompt_dict, prepare_event, restart_eve
     chunk_size = 4
     is_running = False
     prompt = prompt_dict["prompt"]
+    noise_buf = None
 
     torch.cuda.memory._record_memory_history(max_entries=100000)
 
@@ -146,7 +152,7 @@ def input_process(rank, block_num, args, prompt_dict, prepare_event, restart_eve
             break
 
         if args.schedule_block:
-            torch.cuda.synchronize()
+            _sync_if_needed(args)
             start_vae = time.time()
 
         base_noise_scale = float(prompt_dict["noise_scale"])
@@ -170,12 +176,14 @@ def input_process(rank, block_num, args, prompt_dict, prepare_event, restart_eve
 
         latents = pipeline_manager.pipeline.vae.stream_encode(images, is_scale=False)  # [B, 4, T, H//16, W//16] or so
         latents = latents.transpose(2,1).contiguous().to(dtype=torch.bfloat16)
-        noise = torch.randn_like(latents)
-        noisy_latents = noise * noise_scale + latents * (1-noise_scale)
+        if noise_buf is None or noise_buf.shape != latents.shape or noise_buf.device != latents.device or noise_buf.dtype != latents.dtype:
+            noise_buf = torch.empty_like(latents)
+        noise_buf.normal_()
+        noisy_latents = noise_buf * noise_scale + latents * (1-noise_scale)
 
         # Measure DiT time if scheduling is enabled
         if args.schedule_block:
-            torch.cuda.synchronize()
+            _sync_if_needed(args)
             start_dit = time.time()
             t_vae = start_dit - start_vae
 
@@ -196,7 +204,7 @@ def input_process(rank, block_num, args, prompt_dict, prepare_event, restart_eve
 
         # Update DiT timing
         if args.schedule_block:
-            torch.cuda.synchronize()
+            _sync_if_needed(args)
             temp = time.time() - start_dit
             if temp < pipeline_manager.t_dit:
                 pipeline_manager.t_dit = temp
@@ -315,7 +323,7 @@ def output_process(rank, block_num, args, prompt_dict, prepare_event, stop_event
 
         # Measure DiT time if scheduling is enabled
         if args.schedule_block:
-            torch.cuda.synchronize()
+            _sync_if_needed(args)
             start_dit = time.time()
         
         # Run inference
@@ -333,7 +341,7 @@ def output_process(rank, block_num, args, prompt_dict, prepare_event, stop_event
         
         # Update DiT timing
         if args.schedule_block:
-            torch.cuda.synchronize()
+            _sync_if_needed(args)
             temp = time.time() - start_dit
             if temp < pipeline_manager.t_dit:
                 pipeline_manager.t_dit = temp
@@ -362,7 +370,7 @@ def output_process(rank, block_num, args, prompt_dict, prepare_event, stop_event
         # Decode and save video
         if pipeline_manager.processed >= num_steps * pipeline_manager.world_size - 1:
             if args.schedule_block:
-                torch.cuda.synchronize()
+                _sync_if_needed(args)
                 start_vae = time.time()
 
             video = pipeline_manager.pipeline.vae.stream_decode_to_pixel(denoised_pred[[-1]])
@@ -373,7 +381,7 @@ def output_process(rank, block_num, args, prompt_dict, prepare_event, stop_event
                 output_queue.put(image)
             # pipeline_manager.logger.info(f"[Rank {rank}] Completed chunk {latent_data.chunk_idx}")
             
-            torch.cuda.synchronize()
+            _sync_if_needed(args)
 
             if args.schedule_block:
                 t_vae = time.time() - start_vae
@@ -450,7 +458,7 @@ def middle_process(rank, block_num, args, prompt_dict, prepare_event, stop_event
         # pipeline_manager.logger.info(f"[Rank {rank}] Received chunk {latent_data.chunk_idx} from previous rank")
 
         if args.schedule_block:
-            torch.cuda.synchronize()
+            _sync_if_needed(args)
             start_dit = time.time()
         
         # Run inference
@@ -467,7 +475,7 @@ def middle_process(rank, block_num, args, prompt_dict, prepare_event, stop_event
         # pipeline_manager.logger.info(f"[Rank {rank}] Inference done for chunk {latent_data.chunk_idx}")
         
         if args.schedule_block:
-            torch.cuda.synchronize()
+            _sync_if_needed(args)
             temp = time.time() - start_dit
             if temp < pipeline_manager.t_dit:
                 pipeline_manager.t_dit = temp
@@ -494,7 +502,7 @@ def middle_process(rank, block_num, args, prompt_dict, prepare_event, stop_event
             outstanding.append(work_objects)
             # pipeline_manager.logger.info(f"[Rank {rank}] Scheduled send chunk {latent_data.chunk_idx} to next rank")
 
-        torch.cuda.synchronize()
+        _sync_if_needed(args)
 
         if args.schedule_block:
             t_total = pipeline_manager.t_dit

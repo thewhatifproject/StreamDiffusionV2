@@ -214,6 +214,7 @@ def generate_process(args, prompt_dict, prepare_event, restart_event, stop_event
     chunk_size = 4
     is_running = False
     prompt = prompt_dict["prompt"]
+    noise_buf = None
 
     prepare_event.set()
 
@@ -238,8 +239,10 @@ def generate_process(args, prompt_dict, prepare_event, restart_event, stop_event
             pipeline_manager.pipeline.hidden_states = None
             latents = pipeline_manager.pipeline.vae.stream_encode(images, is_scale=False)
             latents = latents.transpose(2, 1).contiguous().to(dtype=torch.bfloat16)
-            noise = torch.randn_like(latents)
-            noisy_latents = noise * noise_scale + latents * (1 - noise_scale)
+            if noise_buf is None or noise_buf.shape != latents.shape or noise_buf.device != latents.device or noise_buf.dtype != latents.dtype:
+                noise_buf = torch.empty_like(latents)
+            noise_buf.normal_()
+            noisy_latents = noise_buf * noise_scale + latents * (1 - noise_scale)
 
             # Prepare pipeline
             current_start = 0
@@ -293,8 +296,10 @@ def generate_process(args, prompt_dict, prepare_event, restart_event, stop_event
 
         latents = pipeline_manager.pipeline.vae.stream_encode(images, is_scale=False)
         latents = latents.transpose(2, 1).contiguous().to(dtype=torch.bfloat16)
-        noise = torch.randn_like(latents)
-        noisy_latents = noise * noise_scale + latents * (1 - noise_scale)
+        if noise_buf is None or noise_buf.shape != latents.shape or noise_buf.device != latents.device or noise_buf.dtype != latents.dtype:
+            noise_buf = torch.empty_like(latents)
+        noise_buf.normal_()
+        noisy_latents = noise_buf * noise_scale + latents * (1 - noise_scale)
 
         denoised_pred = pipeline_manager.pipeline.inference_stream(
             noise=noisy_latents,
