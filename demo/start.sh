@@ -10,4 +10,4 @@ fi
 cd ../
 NUM_GPUS="${NUM_GPUS:-2}"
 GPU_IDS="${GPU_IDS:-0,1}"
-python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 2 --gpu_ids "${GPU_IDS}" --model_type T2V-1.3B
+python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 2 --gpu_ids "${GPU_IDS}" --model_type T2V-14B
