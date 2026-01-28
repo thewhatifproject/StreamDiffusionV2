@@ -10,8 +10,8 @@ fi
 cd ../
 NUM_GPUS="${NUM_GPUS:-2}"
 GPU_IDS="${GPU_IDS:-0,1}"
-MODEL_TYPE="${MODEL_TYPE:-T2V-14B}"
-CHECKPOINT_FOLDER="${CHECKPOINT_FOLDER:-../ckpts/wan_causal_dmd_v2v_14b}"
+MODEL_TYPE="${MODEL_TYPE:-T2V-1.3B}" #T2V-14B
+CHECKPOINT_FOLDER="${CHECKPOINT_FOLDER:-../ckpts/wan_causal_dmd_v2v}" #../ckpts/wan_causal_dmd_v2v_14b
 
 # Abilita tunnel Cloudflare impostando ENABLE_TUNNEL=1
 ENABLE_TUNNEL="${ENABLE_TUNNEL:-1}"
@@ -27,13 +27,30 @@ if [ "${ENABLE_TUNNEL}" = "1" ]; then
     python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 2 --gpu_ids "${GPU_IDS}" --model_type "${MODEL_TYPE}" --checkpoint_folder "${CHECKPOINT_FOLDER}" &
     APP_PID=$!
 
-    # aspetta che il server risponda
-    for _ in {1..30}; do
-        if command -v curl >/dev/null 2>&1; then
-            curl -fsS "http://localhost:7860" >/dev/null 2>&1 && break
-        fi
-        sleep 1
-    done
+    # aspetta che uvicorn apra la porta
+    wait_for_port() {
+        local host="$1"
+        local port="$2"
+        local retries="${3:-60}"
+
+        for _ in $(seq 1 "${retries}"); do
+            if command -v curl >/dev/null 2>&1; then
+                curl -fsS "http://${host}:${port}" >/dev/null 2>&1 && return 0
+            elif command -v nc >/dev/null 2>&1; then
+                nc -z "${host}" "${port}" >/dev/null 2>&1 && return 0
+            else
+                (echo >/dev/tcp/"${host}"/"${port}") >/dev/null 2>&1 && return 0
+            fi
+            sleep 1
+        done
+        return 1
+    }
+
+    if ! wait_for_port "localhost" "7860" 90; then
+        echo -e "\033[1;31m\nUvicorn non è partito: tunnel non avviato\033[0m"
+        kill "${APP_PID}" 2>/dev/null || true
+        exit 1
+    fi
 
     cloudflared tunnel --url "${TUNNEL_URL}" &
     TUNNEL_PID=$!
