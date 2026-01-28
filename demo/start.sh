@@ -20,7 +20,7 @@ TUNNEL_URL="${TUNNEL_URL:-http://localhost:7860}"
 if [ "${ENABLE_TUNNEL}" = "1" ]; then
     if ! command -v cloudflared >/dev/null 2>&1; then
         echo -e "\033[1;33m\ncloudflared non trovato: avvio senza tunnel\033[0m"
-        python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 2 --gpu_ids "${GPU_IDS}" --model_type "${MODEL_TYPE}" --checkpoint_folder "${CHECKPOINT_FOLDER}"
+        python main.py --port 7860 --host 0.0.0.0 --num_gpus "${NUM_GPUS}" --step 3 --gpu_ids "${GPU_IDS}" --model_type "${MODEL_TYPE}" --checkpoint_folder "${CHECKPOINT_FOLDER}"
         exit 0
     fi
 
